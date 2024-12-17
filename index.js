@@ -8,13 +8,38 @@ require('dotenv').config()
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
-app.use(cors({
-      origin: ["http://localhost:5173"],
-      credentials: true
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "https://job-portal-fd7a4.firebaseapp.com/",
+      "https://job-portal-fd7a4.web.app/",
+      "https://job-portal-project36.netlify.app/",
+    ],
+    credentials: true,
   })
 );
 app.use(express.json());
 app.use(cookieParser());
+
+const verifyToken = (req, res, next) => {
+    const token = req.cookies?.token;
+    // console.log('token inside the verifyToken', token)
+    if (!token) {
+        return res.status(401).send({message: 'unauthorized access'})
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(401).send({message: 'unauthrized access'})
+        }
+        req.user = decoded;
+        next();
+    })
+
+}
+
+
 
 // const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.swu9d.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -51,11 +76,12 @@ async function run() {
         app.post('/jwt', (req, res) => {
             const user = req.body;
             const token = jwt.sign(user, process.env.JWT_SECRET, {
-                expiresIn: '6h'
+                expiresIn: '1h'
             });
             res.cookie('token', token, {
                 httpOnly: true,
-                secure:false,
+                secure: false,
+                
             })
             .send({success: true})
         })
@@ -97,9 +123,14 @@ async function run() {
 
         // job application apis
         // get all data, get one data, get some data [o, 1, many]
-        app.get('/job-application', async (req, res) => {
+        app.get('/job-application', verifyToken, async (req, res) => {
             const email = req.query.email;
             const query = { applicant_email: email }
+            console.log(req.cookies?.token);
+            // token email !== query email
+            if (req.user.email !== req.query.email) {
+                return res.status(403).send({message: 'forbidden access'})
+            }
             const result = await jobApplycationCollection.find(query).toArray();
 
             // fokira way to aggregate data
